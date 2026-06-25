@@ -77,7 +77,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
     if (isAuthenticated) {
       if (isAuthRoute) {
-        router.push('/');
+        router.push('/dashboard');
       }
     } else {
       if (!isAuthRoute) {

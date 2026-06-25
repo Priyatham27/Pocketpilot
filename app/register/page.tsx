@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { CheckCircle2, Mail as MailIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -17,6 +18,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registered, setRegistered] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +50,7 @@ export default function RegisterPage() {
       if (error) {
         toast.error(error.message);
       } else {
-        toast.success('Registration successful! Please log in.');
-        router.push('/login');
+        setRegistered(true);
       }
     } catch (err) {
       toast.error('An unexpected error occurred.');
@@ -57,6 +58,37 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  if (registered) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-radial from-slate-900 via-slate-950 to-slate-950 p-4 relative overflow-hidden select-none">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+        <Card className="w-full max-w-md border border-white/10 bg-black/40 backdrop-blur-md shadow-2xl relative z-10">
+          <CardContent className="pt-10 pb-8 flex flex-col items-center text-center space-y-4">
+            <div className="h-16 w-16 bg-green-500/10 rounded-full flex items-center justify-center border border-green-500/30">
+              <CheckCircle2 className="h-8 w-8 text-green-400" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-white">Check your email!</h2>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-xs">
+              We sent a confirmation link to <span className="text-white font-semibold">{email}</span>.
+              Click the link in your email to activate your account, then come back and sign in.
+            </p>
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/10 border border-primary/20 text-primary text-xs">
+              <MailIcon className="h-4 w-4 shrink-0" />
+              <span>Check your spam folder if you don&apos;t see it.</span>
+            </div>
+            <button
+              onClick={() => router.push('/login')}
+              className="mt-2 text-sm text-primary hover:underline font-semibold"
+            >
+              Back to Sign In →
+            </button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-radial from-slate-900 via-slate-950 to-slate-950 p-4 relative overflow-hidden select-none">
