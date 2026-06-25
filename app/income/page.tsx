@@ -251,7 +251,7 @@ export default function IncomePage() {
             <CardContent className="py-12 text-center text-muted-foreground">
               <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No income added yet</p>
-              <p className="text-sm mt-1">Click "Add Income" to record your first entry</p>
+              <p className="text-sm mt-1">Click &quot;Add Income&quot; to record your first entry</p>
             </CardContent>
           </Card>
         ) : (

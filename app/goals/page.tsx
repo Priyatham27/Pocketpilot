@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format, parseISO } from 'date-fns';
-import { Target, Trophy, TrendingUp, Calendar, Check, Plus, History } from 'lucide-react';
+import { Target, Trophy, TrendingUp, Calendar, Check, Plus, History, PiggyBank, TrendingDown, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,10 +28,21 @@ export default function GoalsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [targetAmount, setTargetAmount] = useState(0);
+  const [savingsTarget, setSavingsTarget] = useState(0);
+  const [spendingLimit, setSpendingLimit] = useState(0);
 
   const currentMonth = getCurrentMonth();
   const currentMonthTarget = monthlyTargets.find((t) => t.month === currentMonth);
-  const { currentMonthIncome, monthlyTargetProgress } = useSelectors();
+  const {
+    currentMonthIncome,
+    currentMonthExpense,
+    currentMonthSavings,
+    monthlyTargetProgress,
+    currentMonthSavingsTarget,
+    currentMonthSpendingLimit,
+    monthlyTargetSavingsProgress,
+    monthlyTargetSpendingProgress,
+  } = useSelectors();
 
   // Calculate income for each month
   const getMonthIncome = (month: string) => {
@@ -41,19 +52,25 @@ export default function GoalsPage() {
   };
 
   const handleSetTarget = () => {
-    if (targetAmount > 0) {
+    if (targetAmount > 0 || savingsTarget > 0 || spendingLimit > 0) {
       setMonthlyTarget({
         month: currentMonth,
-        targetAmount,
+        targetAmount: targetAmount || 0,
         currentEarned: 0,
+        savingsTargetAmount: savingsTarget || 0,
+        spendingLimitAmount: spendingLimit || 0,
       });
       setDialogOpen(false);
       setTargetAmount(0);
+      setSavingsTarget(0);
+      setSpendingLimit(0);
     }
   };
 
   const openDialog = () => {
     setTargetAmount(currentMonthTarget?.targetAmount || 0);
+    setSavingsTarget(currentMonthTarget?.savingsTargetAmount || 0);
+    setSpendingLimit(currentMonthTarget?.spendingLimitAmount || 0);
     setDialogOpen(true);
   };
 
@@ -100,76 +117,135 @@ export default function GoalsPage() {
                 </div>
 
                 {currentMonthTarget ? (
-                  <>
-                    <div className="flex items-center gap-3 mb-4">
-                      <h2 className="text-3xl font-bold">{formatCurrency(currentMonthIncome)}</h2>
-                      {isGoalAchieved && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                        >
-                          <Trophy className="h-4 w-4" />
-                          <span className="text-sm font-medium">Achieved!</span>
-                        </motion.div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Progress</span>
-                        <span className="font-medium">{monthlyTargetProgress.toFixed(1)}%</span>
-                      </div>
-                      <Progress
-                        value={monthlyTargetProgress}
-                        className="h-3"
-                      />
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Target: {formatCurrency(currentMonthTarget.targetAmount)}</span>
-                        <span className="text-muted-foreground">
-                          Remaining: {formatCurrency(Math.max(0, currentMonthTarget.targetAmount - currentMonthIncome))}
-                        </span>
-                      </div>
-                    </div>
-
-                    {isGoalAchieved && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 p-4 rounded-lg bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800"
-                      >
-                        <div className="flex items-center gap-2">
-                          <Trophy className="h-6 w-6 text-green-600 dark:text-green-400" />
-                          <div>
-                            <p className="font-semibold text-green-700 dark:text-green-300">Goal Achieved!</p>
-                            <p className="text-sm text-green-600 dark:text-green-400">
-                              Exceeded target by {formatCurrency(currentMonthIncome - currentMonthTarget.targetAmount)}
+                  <div className="w-full">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      {/* Income Goal */}
+                      <div className="bg-white/40 dark:bg-gray-800/40 p-5 rounded-xl border border-muted/20 relative overflow-hidden flex flex-col justify-between">
+                        {currentMonthIncome >= currentMonthTarget.targetAmount && (
+                          <div className="absolute top-0 right-0 p-1.5 bg-green-500 text-white rounded-bl-lg text-xxs font-bold uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
+                            <Trophy className="h-3 w-3" />
+                            Hit!
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <TrendingUp className="h-5 w-5 text-green-500" />
+                            <h3 className="font-semibold text-sm">Monthly Income Target</h3>
+                          </div>
+                          <div className="mb-4">
+                            <p className="text-xs text-muted-foreground">Current Progress</p>
+                            <p className="text-2xl font-bold">{formatCurrency(currentMonthIncome)}</p>
+                          </div>
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>{monthlyTargetProgress.toFixed(0)}% Complete</span>
+                              <span>Target: {formatCurrency(currentMonthTarget.targetAmount)}</span>
+                            </div>
+                            <Progress value={monthlyTargetProgress} className="h-2" />
+                            <p className="text-xxs text-muted-foreground text-right mt-1">
+                              Remaining: {formatCurrency(Math.max(0, currentMonthTarget.targetAmount - currentMonthIncome))}
                             </p>
                           </div>
                         </div>
-                      </motion.div>
-                    )}
-                  </>
+                      </div>
+
+                      {/* Savings Goal */}
+                      <div className="bg-white/40 dark:bg-gray-800/40 p-5 rounded-xl border border-muted/20 relative overflow-hidden flex flex-col justify-between">
+                        {currentMonthSavingsTarget > 0 && currentMonthSavings >= currentMonthSavingsTarget && (
+                          <div className="absolute top-0 right-0 p-1.5 bg-emerald-500 text-white rounded-bl-lg text-xxs font-bold uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
+                            <Trophy className="h-3 w-3" />
+                            Hit!
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <PiggyBank className="h-5 w-5 text-emerald-500" />
+                            <h3 className="font-semibold text-sm">Monthly Savings Target</h3>
+                          </div>
+                          <div className="mb-4">
+                            <p className="text-xs text-muted-foreground">Current Savings</p>
+                            <p className="text-2xl font-bold">{formatCurrency(currentMonthSavings)}</p>
+                          </div>
+                          {currentMonthSavingsTarget > 0 ? (
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>{monthlyTargetSavingsProgress.toFixed(0)}% Complete</span>
+                                <span>Target: {formatCurrency(currentMonthSavingsTarget)}</span>
+                              </div>
+                              <Progress value={monthlyTargetSavingsProgress} className="h-2 bg-emerald-100 dark:bg-emerald-950/20 animate-pulse" />
+                              <p className="text-xxs text-muted-foreground text-right mt-1">
+                                Remaining: {formatCurrency(Math.max(0, currentMonthSavingsTarget - currentMonthSavings))}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No target set. Click &quot;Update Goal&quot; to add.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Spending Limit Goal */}
+                      <div className="bg-white/40 dark:bg-gray-800/40 p-5 rounded-xl border border-muted/20 relative overflow-hidden flex flex-col justify-between">
+                        {currentMonthSpendingLimit > 0 && currentMonthExpense <= currentMonthSpendingLimit && (
+                          <div className="absolute top-0 right-0 p-1.5 bg-blue-500 text-white rounded-bl-lg text-xxs font-bold uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
+                            <Check className="h-3 w-3" />
+                            Safe!
+                          </div>
+                        )}
+                        {currentMonthSpendingLimit > 0 && currentMonthExpense > currentMonthSpendingLimit && (
+                          <div className="absolute top-0 right-0 p-1.5 bg-red-500 text-white rounded-bl-lg text-xxs font-bold uppercase tracking-wider flex items-center gap-0.5 shadow-sm">
+                            <AlertTriangle className="h-3 w-3" />
+                            Over!
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <TrendingDown className="h-5 w-5 text-red-500" />
+                            <h3 className="font-semibold text-sm">Monthly Spending Limit</h3>
+                          </div>
+                          <div className="mb-4">
+                            <p className="text-xs text-muted-foreground">Current Spending</p>
+                            <p className="text-2xl font-bold">{formatCurrency(currentMonthExpense)}</p>
+                          </div>
+                          {currentMonthSpendingLimit > 0 ? (
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>{monthlyTargetSpendingProgress.toFixed(0)}% Used</span>
+                                <span>Limit: {formatCurrency(currentMonthSpendingLimit)}</span>
+                              </div>
+                              <Progress 
+                                value={monthlyTargetSpendingProgress} 
+                                className={cn(
+                                  "h-2",
+                                  currentMonthExpense > currentMonthSpendingLimit ? "bg-red-100 dark:bg-red-950/20" : "bg-blue-100 dark:bg-blue-950/20"
+                                )} 
+                              />
+                              <p className="text-xxs text-muted-foreground text-right mt-1">
+                                {currentMonthExpense > currentMonthSpendingLimit 
+                                  ? `Over Limit by: ${formatCurrency(currentMonthExpense - currentMonthSpendingLimit)}`
+                                  : `Remaining Budget: ${formatCurrency(currentMonthSpendingLimit - currentMonthExpense)}`
+                                }
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No limit set. Click &quot;Update Goal&quot; to add.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <div className="text-center py-8">
+                  <div className="text-center py-8 w-full">
                     <Target className="h-16 w-16 mx-auto mb-4 text-muted-foreground/40" />
-                    <p className="text-xl text-muted-foreground mb-4">No goal set for this month</p>
+                    <p className="text-xl text-muted-foreground mb-4">No goals set for this month</p>
                     <Button onClick={openDialog}>
                       <Plus className="h-4 w-4 mr-2" />
-                      Set Monthly Goal
+                      Set Monthly Goals
                     </Button>
                   </div>
                 )}
-              </div>
-
-              {currentMonthTarget && (
-                <div className="flex flex-col items-center p-6 rounded-xl bg-white/50 dark:bg-gray-800/50">
-                  <p className="text-sm text-muted-foreground mb-2">Target Amount</p>
-                  <p className="text-4xl font-bold text-center">{formatCurrency(currentMonthTarget.targetAmount)}</p>
-                </div>
-              )}
             </div>
-          </CardContent>
+          </div>
+        </CardContent>
         </Card>
 
         {/* Quick Stats */}
@@ -182,7 +258,7 @@ export default function GoalsPage() {
                     <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">This Month's Income</p>
+                    <p className="text-sm text-muted-foreground">This Month&apos;s Income</p>
                     <p className="text-xl font-bold">{formatCurrency(currentMonthIncome)}</p>
                   </div>
                 </div>
@@ -271,31 +347,54 @@ export default function GoalsPage() {
 
         {/* Set Goal Dialog */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Set Monthly Goal</DialogTitle>
+              <DialogTitle>Set Monthly Goals</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="targetAmount">Target Amount (₹)</Label>
+                <Label htmlFor="targetAmount">Income Target Amount (₹)</Label>
                 <Input
                   id="targetAmount"
                   type="number"
-                  placeholder="Enter target amount"
+                  placeholder="e.g. 50000"
                   value={targetAmount || ''}
                   onChange={(e) => setTargetAmount(parseFloat(e.target.value) || 0)}
                 />
               </div>
-              <p className="text-sm text-muted-foreground">
-                Goal for {getMonthLabel(currentMonth)}
+
+              <div className="space-y-2">
+                <Label htmlFor="savingsTarget">Savings Target Amount (₹)</Label>
+                <Input
+                  id="savingsTarget"
+                  type="number"
+                  placeholder="e.g. 15000"
+                  value={savingsTarget || ''}
+                  onChange={(e) => setSavingsTarget(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="spendingLimit">Spending Limit (₹)</Label>
+                <Input
+                  id="spendingLimit"
+                  type="number"
+                  placeholder="e.g. 20000"
+                  value={spendingLimit || ''}
+                  onChange={(e) => setSpendingLimit(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-2">
+                Goals for {getMonthLabel(currentMonth)}
               </p>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSetTarget} disabled={targetAmount <= 0}>
-                Set Goal
+              <Button onClick={handleSetTarget} disabled={targetAmount <= 0 && savingsTarget <= 0 && spendingLimit <= 0}>
+                Set Goals
               </Button>
             </DialogFooter>
           </DialogContent>

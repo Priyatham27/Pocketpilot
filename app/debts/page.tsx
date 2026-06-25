@@ -246,7 +246,7 @@ export default function DebtsPage() {
             <CardContent className="py-12 text-center text-muted-foreground">
               <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No debts recorded</p>
-              <p className="text-sm mt-1">Click "Add Debt" to track money you owe</p>
+              <p className="text-sm mt-1">Click &quot;Add Debt&quot; to track money you owe</p>
             </CardContent>
           </Card>
         ) : (
@@ -273,7 +273,7 @@ export default function DebtsPage() {
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground mt-1">{debt.reason}</p>
-
+ 
                           {debt.status !== 'paid' && (
                             <div className="mt-3">
                               <div className="flex justify-between text-sm mb-1">
@@ -286,7 +286,7 @@ export default function DebtsPage() {
                               />
                             </div>
                           )}
-
+ 
                           <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
                             {debt.dueDate && (
                               <div className="flex items-center gap-1">
@@ -295,7 +295,7 @@ export default function DebtsPage() {
                               </div>
                             )}
                             {debt.notes && (
-                              <p className="text-xs italic">"{debt.notes}"</p>
+                              <p className="text-xs italic">&quot;{debt.notes}&quot;</p>
                             )}
                           </div>
                         </div>

@@ -252,7 +252,7 @@ export default function LoansPage() {
             <CardContent className="py-12 text-center text-muted-foreground">
               <Banknote className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No loans recorded</p>
-              <p className="text-sm mt-1">Click "Add Loan" to track loans you have taken</p>
+              <p className="text-sm mt-1">Click &quot;Add Loan&quot; to track loans you have taken</p>
             </CardContent>
           </Card>
         ) : (
@@ -312,7 +312,7 @@ export default function LoansPage() {
                             )}
                           </div>
                           {loan.notes && (
-                            <p className="text-xs text-muted-foreground mt-2 italic">"{loan.notes}"</p>
+                            <p className="text-xs text-muted-foreground mt-2 italic">&quot;{loan.notes}&quot;</p>
                           )}
                         </div>
                       </div>

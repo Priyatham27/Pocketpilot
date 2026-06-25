@@ -301,7 +301,7 @@ export default function ExpensesPage() {
             <CardContent className="py-12 text-center text-muted-foreground">
               <TrendingDown className="h-12 w-12 mx-auto mb-3 opacity-50" />
               <p>No expenses recorded yet</p>
-              <p className="text-sm mt-1">Click "Add Expense" to record your first expense</p>
+              <p className="text-sm mt-1">Click &quot;Add Expense&quot; to record your first expense</p>
             </CardContent>
           </Card>
         ) : (
