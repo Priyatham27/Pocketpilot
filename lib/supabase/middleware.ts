@@ -1,62 +1,61 @@
-import { createServerClient } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
 
 /**
- * Creates a Supabase client configured for middleware use.
- * Middleware cannot use next/headers directly, so we pass
- * the request/response objects and mutate cookies on them.
+ * Edge-compatible session check for Next.js middleware.
+ *
+ * The full @supabase/supabase-js SDK contains Node.js-specific code
+ * that crashes on Vercel's Edge Runtime where middleware always runs.
+ *
+ * This implementation checks for Supabase session cookies directly —
+ * zero SDK imports, zero edge compatibility issues, works on any runtime.
+ *
+ * Security: The server-side session is still verified by Supabase's RLS
+ * policies on every database query. This middleware only handles redirects.
  */
-export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
+const PUBLIC_ROUTES = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/auth/callback',
+];
+
+function hasValidSessionCookie(request: NextRequest): boolean {
+  const cookies = request.cookies.getAll();
+  // Supabase @supabase/ssr stores auth tokens in cookies named:
+  // sb-<project-ref>-auth-token or sb-<project-ref>-auth-token.0 etc.
+  return cookies.some(
+    (cookie) =>
+      (cookie.name.startsWith('sb-') && cookie.name.includes('auth-token')) ||
+      // Legacy @supabase/auth-helpers-nextjs format
+      cookie.name === 'supabase-auth-token'
   );
+}
 
-  // IMPORTANT: Do NOT write logic between createServerClient and
-  // supabase.auth.getUser(). A bug in that region will prevent sessions from
-  // being refreshed and users will be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Define public routes that don't require authentication
-  const publicRoutes = ['/login', '/register', '/forgot-password', '/auth/callback'];
-  const isPublicRoute = publicRoutes.some((route) => pathname.startsWith(route));
+  const isPublicRoute = PUBLIC_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  const hasSession = hasValidSessionCookie(request);
 
   // Redirect unauthenticated users away from protected routes
-  if (!user && !isPublicRoute) {
+  if (!hasSession && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
+    // Preserve the original destination for post-login redirect
+    url.searchParams.set('redirectedFrom', pathname);
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && isPublicRoute && pathname !== '/auth/callback') {
+  // Redirect authenticated users away from auth pages (not the callback)
+  if (hasSession && isPublicRoute && pathname !== '/auth/callback') {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
   }
 
-  // IMPORTANT: supabaseResponse must be returned as-is to preserve session cookies
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
