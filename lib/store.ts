@@ -70,8 +70,7 @@ export const useAppStore = create<AppState>()(
       // Sync & Initialization from Supabase
       fetchUserData: async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const user = session?.user;
+          const { data: { user } } = await supabase.auth.getUser();
           if (!user) return;
 
           // Fetch user profile / settings
@@ -163,8 +162,7 @@ export const useAppStore = create<AppState>()(
 
       migrateLocalStorageToCloud: async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const user = session?.user;
+          const { data: { user } } = await supabase.auth.getUser();
           if (!user) return false;
 
           const rawData = localStorage.getItem('pocketpilot-storage');
@@ -233,8 +231,7 @@ export const useAppStore = create<AppState>()(
 
       skipLocalStorageMigration: async () => {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const user = session?.user;
+          const { data: { user } } = await supabase.auth.getUser();
           if (!user) return false;
 
           await supabase
@@ -252,8 +249,7 @@ export const useAppStore = create<AppState>()(
 
       // Transaction actions
       addTransaction: async (transaction) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const newTransaction: Transaction = {
@@ -281,8 +277,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateTransaction: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -300,8 +295,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteTransaction: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id);
@@ -313,8 +307,7 @@ export const useAppStore = create<AppState>()(
 
       // Debt actions
       addDebt: async (debt) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -331,8 +324,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateDebt: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -346,8 +338,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteDebt: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('debts').delete().eq('id', id).eq('user_id', user.id);
@@ -359,8 +350,7 @@ export const useAppStore = create<AppState>()(
 
       // Loan actions
       addLoan: async (loan) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -377,8 +367,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateLoan: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -392,8 +381,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteLoan: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('loans').delete().eq('id', id).eq('user_id', user.id);
@@ -405,8 +393,7 @@ export const useAppStore = create<AppState>()(
 
       // Monthly target actions
       setMonthlyTarget: async (target) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -454,8 +441,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateMonthlyTarget: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -473,8 +459,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteMonthlyTarget: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('monthly_goals').delete().eq('id', id).eq('user_id', user.id);
@@ -486,8 +471,7 @@ export const useAppStore = create<AppState>()(
 
       // Notification actions
       addNotification: async (notification) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const newNotification: Notification = {
@@ -502,8 +486,7 @@ export const useAppStore = create<AppState>()(
       },
 
       markNotificationRead: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase
@@ -520,8 +503,7 @@ export const useAppStore = create<AppState>()(
       },
 
       clearNotifications: async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('notifications').delete().eq('user_id', user.id);
@@ -531,8 +513,7 @@ export const useAppStore = create<AppState>()(
 
       // Settings actions
       updateSettings: async (updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           const dbUpdates: any = {};
           if (updates.currency) dbUpdates.currency = updates.currency;
@@ -553,8 +534,7 @@ export const useAppStore = create<AppState>()(
       },
 
       setCurrency: async (currency) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           await supabase.from('user_profiles').update({ currency }).eq('id', user.id);
         }
@@ -566,8 +546,7 @@ export const useAppStore = create<AppState>()(
 
       // Purchase Planner actions
       addPurchasePlannerItem: async (item) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -584,8 +563,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updatePurchasePlannerItem: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -603,8 +581,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deletePurchasePlannerItem: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('purchase_planner').delete().eq('id', id).eq('user_id', user.id);
@@ -616,8 +593,7 @@ export const useAppStore = create<AppState>()(
 
       // Priority Purchases actions
       addPriorityPurchase: async (item) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -634,8 +610,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updatePriorityPurchase: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -653,8 +628,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deletePriorityPurchase: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('priority_purchases').delete().eq('id', id).eq('user_id', user.id);
@@ -666,8 +640,7 @@ export const useAppStore = create<AppState>()(
 
       // Bills & Payments actions
       addBill: async (bill) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -684,8 +657,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateBill: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -699,8 +671,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteBill: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
@@ -712,8 +683,7 @@ export const useAppStore = create<AppState>()(
 
       // Savings Goals actions
       addSavingsGoal: async (goal) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -731,8 +701,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateSavingsGoal: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let merged: any = null;
@@ -760,8 +729,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteSavingsGoal: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('savings_goals').delete().eq('id', id).eq('user_id', user.id);
@@ -772,8 +740,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addSavingsToGoal: async (id, amount) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let updatedGoal: any = null;
@@ -808,8 +775,7 @@ export const useAppStore = create<AppState>()(
 
       // Trip Planner actions
       addTrip: async (trip) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -828,8 +794,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateTrip: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let merged: any = null;
@@ -868,8 +833,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteTrip: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('trip_planner').delete().eq('id', id).eq('user_id', user.id);
@@ -880,8 +844,7 @@ export const useAppStore = create<AppState>()(
       },
 
       addTripContribution: async (tripId, contribution) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -940,8 +903,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteTripContribution: async (tripId, contributionId) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let updatedFields: any = null;
@@ -985,8 +947,7 @@ export const useAppStore = create<AppState>()(
 
       // Financial Notes actions
       addFinancialNote: async (note) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const now = Date.now();
@@ -1005,8 +966,7 @@ export const useAppStore = create<AppState>()(
       },
 
       updateFinancialNote: async (id, updates) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         const updatedData = { ...updates, updatedAt: Date.now() };
@@ -1024,8 +984,7 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteFinancialNote: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         await supabase.from('financial_notes').delete().eq('id', id).eq('user_id', user.id);
@@ -1036,8 +995,7 @@ export const useAppStore = create<AppState>()(
       },
 
       pinFinancialNote: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let updatedNote: any = null;
@@ -1064,8 +1022,7 @@ export const useAppStore = create<AppState>()(
       },
 
       archiveFinancialNote: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         let updatedNote: any = null;
@@ -1097,8 +1054,7 @@ export const useAppStore = create<AppState>()(
 
       // Local notifications tracker
       addNotifiedId: async (id) => {
-        const { data: { session } } = await supabase.auth.getSession();
-        const user = session?.user;
+        const { data: { user } } = await supabase.auth.getUser();
         const currentNotifiedIds = get().notifiedIds;
         const updatedNotifiedIds = [...currentNotifiedIds, id];
 
@@ -1142,12 +1098,12 @@ export const useAppStore = create<AppState>()(
         const updatedShownQuoteIndexes = [...state.shownQuoteIndexes, randomIndex];
 
         // Background sync to Supabase user profile
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (session?.user) {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (user) {
             supabase
               .from('user_profiles')
               .update({ shown_quote_indexes: updatedShownQuoteIndexes })
-              .eq('id', session.user.id);
+              .eq('id', user.id);
           }
         });
 
@@ -1166,8 +1122,7 @@ export const useAppStore = create<AppState>()(
           confirm('Are you sure you want to delete all data? This cannot be undone.')
         ) {
           // Clear Supabase database under this user
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            const user = session?.user;
+          supabase.auth.getUser().then(({ data: { user } }) => {
             if (user) {
               Promise.all([
                 supabase.from('transactions').delete().eq('user_id', user.id),
@@ -1243,8 +1198,7 @@ export const useAppStore = create<AppState>()(
           const parsed = JSON.parse(data);
           if (parsed.transactions && parsed.debts && parsed.loans && parsed.monthlyTargets) {
             const uploadImports = async () => {
-              const { data: { session } } = await supabase.auth.getSession();
-              const user = session?.user;
+              const { data: { user } } = await supabase.auth.getUser();
               if (!user) return;
 
               const mapWithUserId = (list: any[]) =>

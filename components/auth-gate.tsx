@@ -23,8 +23,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
 
     // Initial session check on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
         fetchUserData();
       }
     });
