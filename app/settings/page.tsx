@@ -31,6 +31,8 @@ import { MainLayout } from '@/components/main-layout';
 import { useAppStore } from '@/lib/store';
 import { currencyNames } from '@/lib/currency';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -40,7 +42,47 @@ export default function SettingsPage() {
   const importData = useAppStore((state) => state.importData);
   const clearAllData = useAppStore((state) => state.clearAllData);
 
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [user, setUser] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  React.useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user);
+    });
+  }, []);
+
+  const handleSignOut = async () => {
+    if (confirm('Are you sure you want to sign out?')) {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success('Signed out successfully.');
+        router.push('/login');
+      }
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (confirm('WARNING: Are you sure you want to delete your account? This will permanently delete all your data and can NOT be undone.')) {
+      setDeleting(true);
+      try {
+        if (user) {
+          // Deleting from user_profiles will trigger ON DELETE CASCADE deletes for all other user rows
+          await supabase.from('user_profiles').delete().eq('id', user.id);
+        }
+        await supabase.auth.signOut();
+        toast.success('Your account and personal data have been purged successfully.');
+        router.push('/login');
+      } catch (err) {
+        toast.error('An error occurred during account deletion.');
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
 
   const [selectedModules, setSelectedModules] = useState<string[]>([
     'income', 'expenses', 'debts', 'loans', 'bills', 'purchase-planner',
@@ -469,16 +511,34 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-6">
-          {/* Profile Settings */}
+          {/* Account & Profile Settings */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <User className="h-5 w-5" />
-                Profile Settings
+                Account & Profile Settings
               </CardTitle>
-              <CardDescription>Customize your personal profile</CardDescription>
+              <CardDescription>Manage your profile details and session settings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="flex items-center gap-4 p-4 bg-muted/20 rounded-lg">
+                {user?.user_metadata?.avatar_url ? (
+                  <img
+                    src={user.user_metadata.avatar_url}
+                    alt="Profile Avatar"
+                    className="h-12 w-12 rounded-full border border-white/10"
+                  />
+                ) : (
+                  <div className="h-12 w-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <User className="h-6 w-6 text-primary" />
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold">{settings.userName || 'Priyatham'}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email || 'Loading email...'}</p>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="userName">Display Name</Label>
                 <Input
@@ -488,6 +548,25 @@ export default function SettingsPage() {
                   onChange={(e) => updateSettings({ userName: e.target.value })}
                   className="max-w-xs"
                 />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Supabase Account Management</Label>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={handleSignOut}>
+                    Sign Out 🚪
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                  >
+                    Delete Account ⚠️
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -33,6 +33,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { FloatingActionButton } from './floating-action-button';
+import { MigrationModal } from './migration-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -568,6 +569,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
         </AnimatePresence>
       </main>
       <FloatingActionButton />
+      <MigrationModal />
     </div>
   );
 }

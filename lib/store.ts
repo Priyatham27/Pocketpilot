@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { quotes } from './quotes';
+import { supabase, mapToSnake, mapToCamel } from './supabase';
 import {
   Transaction,
   Debt,
@@ -20,103 +21,9 @@ import {
   TripExpenseBreakdown,
   TripPaymentStatus,
   FinancialNote,
-  QuoteState
+  QuoteState,
+  AppState
 } from './types';
-
-interface AppState {
-  transactions: Transaction[];
-  debts: Debt[];
-  loans: Loan[];
-  monthlyTargets: MonthlyTarget[];
-  notifications: Notification[];
-  settings: Settings;
-  purchasePlanner: PurchasePlannerItem[];
-  priorityPurchases: PriorityPurchaseItem[];
-  bills: Bill[];
-  savingsGoals: SavingsGoal[];
-  trips: Trip[];
-  financialNotes: FinancialNote[];
-  quoteOfTheDay: QuoteState | null;
-  shownQuoteIndexes: number[];
-  notifiedIds: string[];
-
-  // Transaction actions
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateTransaction: (id: string, updates: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
-
-  // Debt actions
-  addDebt: (debt: Omit<Debt, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateDebt: (id: string, updates: Partial<Debt>) => void;
-  deleteDebt: (id: string) => void;
-
-  // Loan actions
-  addLoan: (loan: Omit<Loan, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateLoan: (id: string, updates: Partial<Loan>) => void;
-  deleteLoan: (id: string) => void;
-
-  // Monthly target actions
-  setMonthlyTarget: (target: Omit<MonthlyTarget, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateMonthlyTarget: (id: string, updates: Partial<MonthlyTarget>) => void;
-  deleteMonthlyTarget: (id: string) => void;
-
-  // Notification actions
-  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => void;
-  markNotificationRead: (id: string) => void;
-  clearNotifications: () => void;
-
-  // Settings actions
-  updateSettings: (updates: Partial<Settings>) => void;
-  setCurrency: (currency: Currency) => void;
-
-  // Purchase Planner actions
-  addPurchasePlannerItem: (item: Omit<PurchasePlannerItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updatePurchasePlannerItem: (id: string, updates: Partial<PurchasePlannerItem>) => void;
-  deletePurchasePlannerItem: (id: string) => void;
-
-  // Priority Purchases actions
-  addPriorityPurchase: (item: Omit<PriorityPurchaseItem, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updatePriorityPurchase: (id: string, updates: Partial<PriorityPurchaseItem>) => void;
-  deletePriorityPurchase: (id: string) => void;
-
-  // Bills & Payments actions
-  addBill: (bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => void;
-  updateBill: (id: string, updates: Partial<Bill>) => void;
-  deleteBill: (id: string) => void;
-
-  // Savings Goals actions
-  addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'createdAt' | 'updatedAt' | 'remainingAmount'>) => void;
-  updateSavingsGoal: (id: string, updates: Partial<SavingsGoal>) => void;
-  deleteSavingsGoal: (id: string) => void;
-  addSavingsToGoal: (id: string, amount: number) => void;
-
-  // Trip Planner actions
-  addTrip: (trip: Omit<Trip, 'id' | 'createdAt' | 'updatedAt' | 'savedAmount' | 'contributions'>) => void;
-  updateTrip: (id: string, updates: Partial<Trip>) => void;
-  deleteTrip: (id: string) => void;
-  addTripContribution: (tripId: string, contribution: Omit<TripContribution, 'id' | 'date' | 'time' | 'timestamp'>) => void;
-  deleteTripContribution: (tripId: string, contributionId: string) => void;
-
-  // Financial Notes actions
-  addFinancialNote: (note: Omit<FinancialNote, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'pinned'>) => void;
-  updateFinancialNote: (id: string, updates: Partial<FinancialNote>) => void;
-  deleteFinancialNote: (id: string) => void;
-  pinFinancialNote: (id: string) => void;
-  archiveFinancialNote: (id: string) => void;
-
-  // Local notifications tracker
-  addNotifiedId: (id: string) => void;
-
-  // Quote actions
-  setQuoteOfTheDay: (quote: QuoteState) => void;
-  resetQuoteIndexPool: () => void;
-  pickDailyQuote: () => { quote: string; author: string };
-
-  // Data actions
-  clearAllData: () => void;
-  exportData: () => string;
-  importData: (data: string) => boolean;
-}
 
 const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
 
@@ -158,42 +65,258 @@ export const useAppStore = create<AppState>()(
       quoteOfTheDay: null,
       shownQuoteIndexes: [],
       notifiedIds: [],
+      localDataImported: false,
+
+      // Sync & Initialization from Supabase
+      fetchUserData: async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const user = session?.user;
+          if (!user) return;
+
+          // Fetch user profile / settings
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          // Fetch all modules in parallel
+          const [
+            { data: txs },
+            { data: dbts },
+            { data: lns },
+            { data: blls },
+            { data: pp },
+            { data: prioP },
+            { data: savG },
+            { data: mthG },
+            { data: trps },
+            { data: notes },
+            { data: notifs }
+          ] = await Promise.all([
+            supabase.from('transactions').select('*').eq('user_id', user.id).order('timestamp', { ascending: false }),
+            supabase.from('debts').select('*').eq('user_id', user.id),
+            supabase.from('loans').select('*').eq('user_id', user.id),
+            supabase.from('bills').select('*').eq('user_id', user.id),
+            supabase.from('purchase_planner').select('*').eq('user_id', user.id),
+            supabase.from('priority_purchases').select('*').eq('user_id', user.id),
+            supabase.from('savings_goals').select('*').eq('user_id', user.id),
+            supabase.from('monthly_goals').select('*').eq('user_id', user.id),
+            supabase.from('trip_planner').select('*').eq('user_id', user.id),
+            supabase.from('financial_notes').select('*').eq('user_id', user.id),
+            supabase.from('notifications').select('*').eq('user_id', user.id)
+          ]);
+
+          set({
+            transactions: mapToCamel(txs || []),
+            debts: mapToCamel(dbts || []),
+            loans: mapToCamel(lns || []),
+            bills: mapToCamel(blls || []),
+            purchasePlanner: mapToCamel(pp || []),
+            priorityPurchases: mapToCamel(prioP || []),
+            savingsGoals: mapToCamel(savG || []),
+            monthlyTargets: mapToCamel(mthG || []),
+            trips: mapToCamel(trps || []),
+            financialNotes: mapToCamel(notes || []),
+            notifications: mapToCamel(notifs || []),
+            shownQuoteIndexes: profile?.shown_quote_indexes || [],
+            notifiedIds: profile?.notified_ids || [],
+            localDataImported: profile?.local_data_imported || false,
+            settings: {
+              currency: profile?.currency || 'INR',
+              theme: profile?.theme || 'system',
+              largeExpenseThreshold: Number(profile?.large_expense_threshold) || 10000,
+              userName: profile?.display_name || user.email?.split('@')[0] || 'Priyatham',
+            }
+          });
+        } catch (err) {
+          console.error('Error fetching user data from Supabase:', err);
+        }
+      },
+
+      clearUserData: () => {
+        set({
+          transactions: [],
+          debts: [],
+          loans: [],
+          monthlyTargets: [],
+          notifications: [],
+          settings: {
+            currency: 'INR',
+            theme: 'system',
+            largeExpenseThreshold: 10000,
+            userName: 'Priyatham',
+          },
+          purchasePlanner: [],
+          priorityPurchases: [],
+          bills: [],
+          savingsGoals: [],
+          trips: [],
+          financialNotes: [],
+          quoteOfTheDay: null,
+          shownQuoteIndexes: [],
+          notifiedIds: [],
+          localDataImported: false,
+        });
+      },
+
+      migrateLocalStorageToCloud: async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const user = session?.user;
+          if (!user) return false;
+
+          const rawData = localStorage.getItem('pocketpilot-storage');
+          if (!rawData) return false;
+
+          const parsed = JSON.parse(rawData);
+          const stateData = parsed.state || {};
+
+          const mapWithUserId = (list: any[]) =>
+            (list || []).map((item) => mapToSnake({ ...item, userId: user.id }));
+
+          const promises = [];
+
+          if (stateData.transactions?.length) {
+            promises.push(supabase.from('transactions').insert(mapWithUserId(stateData.transactions)));
+          }
+          if (stateData.debts?.length) {
+            promises.push(supabase.from('debts').insert(mapWithUserId(stateData.debts)));
+          }
+          if (stateData.loans?.length) {
+            promises.push(supabase.from('loans').insert(mapWithUserId(stateData.loans)));
+          }
+          if (stateData.bills?.length) {
+            promises.push(supabase.from('bills').insert(mapWithUserId(stateData.bills)));
+          }
+          if (stateData.purchasePlanner?.length) {
+            promises.push(supabase.from('purchase_planner').insert(mapWithUserId(stateData.purchasePlanner)));
+          }
+          if (stateData.priorityPurchases?.length) {
+            promises.push(supabase.from('priority_purchases').insert(mapWithUserId(stateData.priorityPurchases)));
+          }
+          if (stateData.savingsGoals?.length) {
+            promises.push(supabase.from('savings_goals').insert(mapWithUserId(stateData.savingsGoals)));
+          }
+          if (stateData.monthlyTargets?.length) {
+            promises.push(supabase.from('monthly_goals').insert(mapWithUserId(stateData.monthlyTargets)));
+          }
+          if (stateData.trips?.length) {
+            promises.push(supabase.from('trip_planner').insert(mapWithUserId(stateData.trips)));
+          }
+          if (stateData.financialNotes?.length) {
+            promises.push(supabase.from('financial_notes').insert(mapWithUserId(stateData.financialNotes)));
+          }
+          if (stateData.notifications?.length) {
+            promises.push(supabase.from('notifications').insert(mapWithUserId(stateData.notifications)));
+          }
+
+          await Promise.all(promises);
+
+          // Update import flag
+          await supabase
+            .from('user_profiles')
+            .update({ local_data_imported: true })
+            .eq('id', user.id);
+
+          set({ localDataImported: true });
+
+          // Re-fetch all data to ensure local Zustand store matches cloud state
+          await get().fetchUserData();
+          return true;
+        } catch (err) {
+          console.error('Data migration error:', err);
+          return false;
+        }
+      },
+
+      skipLocalStorageMigration: async () => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const user = session?.user;
+          if (!user) return false;
+
+          await supabase
+            .from('user_profiles')
+            .update({ local_data_imported: true })
+            .eq('id', user.id);
+
+          set({ localDataImported: true });
+          return true;
+        } catch (err) {
+          console.error('Skip migration error:', err);
+          return false;
+        }
+      },
 
       // Transaction actions
-      addTransaction: (transaction) => set((state) => {
-        const now = Date.now();
+      addTransaction: async (transaction) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const newTransaction: Transaction = {
           ...transaction,
           id: generateId(),
-          createdAt: now,
-          updatedAt: now,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
         };
 
-        // Check for large expense
-        if (transaction.type === 'expense' && transaction.amount >= state.settings.largeExpenseThreshold) {
-          state.addNotification({
-            type: 'large_expense',
-            title: 'Large Expense Alert',
-            message: `You recorded an expense of ₹${transaction.amount.toLocaleString()}`,
-            read: false,
-          });
-        }
+        const dbRow = mapToSnake({ ...newTransaction, userId: user.id });
+        await supabase.from('transactions').insert(dbRow);
 
-        return { transactions: [newTransaction, ...state.transactions] };
-      }),
+        set((state) => {
+          // Check for large expense notification
+          if (transaction.type === 'expense' && transaction.amount >= state.settings.largeExpenseThreshold) {
+            state.addNotification({
+              type: 'large_expense',
+              title: 'Large Expense Alert',
+              message: `You recorded an expense of ₹${transaction.amount.toLocaleString()}`,
+              read: false,
+            });
+          }
+          return { transactions: [newTransaction, ...state.transactions] };
+        });
+      },
 
-      updateTransaction: (id, updates) => set((state) => ({
-        transactions: state.transactions.map((t) =>
-          t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
-        ),
-      })),
+      updateTransaction: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
 
-      deleteTransaction: (id) => set((state) => ({
-        transactions: state.transactions.filter((t) => t.id !== id),
-      })),
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase
+          .from('transactions')
+          .update(mapToSnake(updatedData))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          transactions: state.transactions.map((t) =>
+            t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
+          ),
+        }));
+      },
+
+      deleteTransaction: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('transactions').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          transactions: state.transactions.filter((t) => t.id !== id),
+        }));
+      },
 
       // Debt actions
-      addDebt: (debt) => set((state) => {
+      addDebt: async (debt) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newDebt: Debt = {
           ...debt,
@@ -201,21 +324,45 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { debts: [newDebt, ...state.debts] };
-      }),
 
-      updateDebt: (id, updates) => set((state) => ({
-        debts: state.debts.map((d) =>
-          d.id === id ? { ...d, ...updates, updatedAt: Date.now() } : d
-        ),
-      })),
+        await supabase.from('debts').insert(mapToSnake({ ...newDebt, userId: user.id }));
 
-      deleteDebt: (id) => set((state) => ({
-        debts: state.debts.filter((d) => d.id !== id),
-      })),
+        set((state) => ({ debts: [newDebt, ...state.debts] }));
+      },
+
+      updateDebt: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase.from('debts').update(mapToSnake(updatedData)).eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          debts: state.debts.map((d) =>
+            d.id === id ? { ...d, ...updates, updatedAt: Date.now() } : d
+          ),
+        }));
+      },
+
+      deleteDebt: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('debts').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          debts: state.debts.filter((d) => d.id !== id),
+        }));
+      },
 
       // Loan actions
-      addLoan: (loan) => set((state) => {
+      addLoan: async (loan) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newLoan: Loan = {
           ...loan,
@@ -223,84 +370,206 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { loans: [newLoan, ...state.loans] };
-      }),
 
-      updateLoan: (id, updates) => set((state) => ({
-        loans: state.loans.map((l) =>
-          l.id === id ? { ...l, ...updates, updatedAt: Date.now() } : l
-        ),
-      })),
+        await supabase.from('loans').insert(mapToSnake({ ...newLoan, userId: user.id }));
 
-      deleteLoan: (id) => set((state) => ({
-        loans: state.loans.filter((l) => l.id !== id),
-      })),
+        set((state) => ({ loans: [newLoan, ...state.loans] }));
+      },
+
+      updateLoan: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase.from('loans').update(mapToSnake(updatedData)).eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          loans: state.loans.map((l) =>
+            l.id === id ? { ...l, ...updates, updatedAt: Date.now() } : l
+          ),
+        }));
+      },
+
+      deleteLoan: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('loans').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          loans: state.loans.filter((l) => l.id !== id),
+        }));
+      },
 
       // Monthly target actions
-      setMonthlyTarget: (target) => set((state) => {
+      setMonthlyTarget: async (target) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
-        const existingIndex = state.monthlyTargets.findIndex(t => t.month === target.month);
+        const existingIndex = get().monthlyTargets.findIndex((t) => t.month === target.month);
 
         if (existingIndex >= 0) {
-          const updated = [...state.monthlyTargets];
-          updated[existingIndex] = {
-            ...updated[existingIndex],
+          const existing = get().monthlyTargets[existingIndex];
+          const updatedTarget: MonthlyTarget = {
+            ...existing,
             targetAmount: target.targetAmount,
-            savingsTargetAmount: target.savingsTargetAmount !== undefined ? target.savingsTargetAmount : updated[existingIndex].savingsTargetAmount,
-            spendingLimitAmount: target.spendingLimitAmount !== undefined ? target.spendingLimitAmount : updated[existingIndex].spendingLimitAmount,
+            savingsTargetAmount:
+              target.savingsTargetAmount !== undefined
+                ? target.savingsTargetAmount
+                : existing.savingsTargetAmount,
+            spendingLimitAmount:
+              target.spendingLimitAmount !== undefined
+                ? target.spendingLimitAmount
+                : existing.spendingLimitAmount,
             updatedAt: now,
           };
-          return { monthlyTargets: updated };
+
+          await supabase
+            .from('monthly_goals')
+            .update(mapToSnake(updatedTarget))
+            .eq('id', existing.id)
+            .eq('user_id', user.id);
+
+          set((state) => {
+            const updated = [...state.monthlyTargets];
+            updated[existingIndex] = updatedTarget;
+            return { monthlyTargets: updated };
+          });
+        } else {
+          const newTarget: MonthlyTarget = {
+            ...target,
+            id: generateId(),
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          await supabase.from('monthly_goals').insert(mapToSnake({ ...newTarget, user_id: user.id }));
+
+          set((state) => ({ monthlyTargets: [newTarget, ...state.monthlyTargets] }));
         }
+      },
 
-        const newTarget: MonthlyTarget = {
-          ...target,
-          id: generateId(),
-          createdAt: now,
-          updatedAt: now,
-        };
-        return { monthlyTargets: [newTarget, ...state.monthlyTargets] };
-      }),
+      updateMonthlyTarget: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
 
-      updateMonthlyTarget: (id, updates) => set((state) => ({
-        monthlyTargets: state.monthlyTargets.map((t) =>
-          t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
-        ),
-      })),
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase
+          .from('monthly_goals')
+          .update(mapToSnake(updatedData))
+          .eq('id', id)
+          .eq('user_id', user.id);
 
-      deleteMonthlyTarget: (id) => set((state) => ({
-        monthlyTargets: state.monthlyTargets.filter((t) => t.id !== id),
-      })),
+        set((state) => ({
+          monthlyTargets: state.monthlyTargets.map((t) =>
+            t.id === id ? { ...t, ...updates, updatedAt: Date.now() } : t
+          ),
+        }));
+      },
+
+      deleteMonthlyTarget: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('monthly_goals').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          monthlyTargets: state.monthlyTargets.filter((t) => t.id !== id),
+        }));
+      },
 
       // Notification actions
-      addNotification: (notification) => set((state) => {
+      addNotification: async (notification) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const newNotification: Notification = {
           ...notification,
           id: generateId(),
           createdAt: Date.now(),
         };
-        return { notifications: [newNotification, ...state.notifications] };
-      }),
 
-      markNotificationRead: (id) => set((state) => ({
-        notifications: state.notifications.map((n) =>
-          n.id === id ? { ...n, read: true } : n
-        ),
-      })),
+        await supabase.from('notifications').insert(mapToSnake({ ...newNotification, userId: user.id }));
 
-      clearNotifications: () => set({ notifications: [] }),
+        set((state) => ({ notifications: [newNotification, ...state.notifications] }));
+      },
+
+      markNotificationRead: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n
+          ),
+        }));
+      },
+
+      clearNotifications: async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('notifications').delete().eq('user_id', user.id);
+
+        set({ notifications: [] });
+      },
 
       // Settings actions
-      updateSettings: (updates) => set((state) => ({
-        settings: { ...state.settings, ...updates },
-      })),
+      updateSettings: async (updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (user) {
+          const dbUpdates: any = {};
+          if (updates.currency) dbUpdates.currency = updates.currency;
+          if (updates.theme) dbUpdates.theme = updates.theme;
+          if (updates.largeExpenseThreshold !== undefined)
+            dbUpdates.largeExpenseThreshold = updates.largeExpenseThreshold;
+          if (updates.userName) dbUpdates.displayName = updates.userName;
 
-      setCurrency: (currency) => set((state) => ({
-        settings: { ...state.settings, currency },
-      })),
+          await supabase
+            .from('user_profiles')
+            .update(mapToSnake(dbUpdates))
+            .eq('id', user.id);
+        }
+
+        set((state) => ({
+          settings: { ...state.settings, ...updates },
+        }));
+      },
+
+      setCurrency: async (currency) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (user) {
+          await supabase.from('user_profiles').update({ currency }).eq('id', user.id);
+        }
+
+        set((state) => ({
+          settings: { ...state.settings, currency },
+        }));
+      },
 
       // Purchase Planner actions
-      addPurchasePlannerItem: (item) => set((state) => {
+      addPurchasePlannerItem: async (item) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newItem: PurchasePlannerItem = {
           ...item,
@@ -308,21 +577,49 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { purchasePlanner: [newItem, ...state.purchasePlanner] };
-      }),
 
-      updatePurchasePlannerItem: (id, updates) => set((state) => ({
-        purchasePlanner: state.purchasePlanner.map((item) =>
-          item.id === id ? { ...item, ...updates, updatedAt: Date.now() } : item
-        ),
-      })),
+        await supabase.from('purchase_planner').insert(mapToSnake({ ...newItem, userId: user.id }));
 
-      deletePurchasePlannerItem: (id) => set((state) => ({
-        purchasePlanner: state.purchasePlanner.filter((item) => item.id !== id),
-      })),
+        set((state) => ({ purchasePlanner: [newItem, ...state.purchasePlanner] }));
+      },
+
+      updatePurchasePlannerItem: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase
+          .from('purchase_planner')
+          .update(mapToSnake(updatedData))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          purchasePlanner: state.purchasePlanner.map((item) =>
+            item.id === id ? { ...item, ...updates, updatedAt: Date.now() } : item
+          ),
+        }));
+      },
+
+      deletePurchasePlannerItem: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('purchase_planner').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          purchasePlanner: state.purchasePlanner.filter((item) => item.id !== id),
+        }));
+      },
 
       // Priority Purchases actions
-      addPriorityPurchase: (item) => set((state) => {
+      addPriorityPurchase: async (item) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newItem: PriorityPurchaseItem = {
           ...item,
@@ -330,21 +627,49 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { priorityPurchases: [newItem, ...state.priorityPurchases] };
-      }),
 
-      updatePriorityPurchase: (id, updates) => set((state) => ({
-        priorityPurchases: state.priorityPurchases.map((item) =>
-          item.id === id ? { ...item, ...updates, updatedAt: Date.now() } : item
-        ),
-      })),
+        await supabase.from('priority_purchases').insert(mapToSnake({ ...newItem, userId: user.id }));
 
-      deletePriorityPurchase: (id) => set((state) => ({
-        priorityPurchases: state.priorityPurchases.filter((item) => item.id !== id),
-      })),
+        set((state) => ({ priorityPurchases: [newItem, ...state.priorityPurchases] }));
+      },
+
+      updatePriorityPurchase: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase
+          .from('priority_purchases')
+          .update(mapToSnake(updatedData))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          priorityPurchases: state.priorityPurchases.map((item) =>
+            item.id === id ? { ...item, ...updates, updatedAt: Date.now() } : item
+          ),
+        }));
+      },
+
+      deletePriorityPurchase: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('priority_purchases').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          priorityPurchases: state.priorityPurchases.filter((item) => item.id !== id),
+        }));
+      },
 
       // Bills & Payments actions
-      addBill: (bill) => set((state) => {
+      addBill: async (bill) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newBill: Bill = {
           ...bill,
@@ -352,21 +677,45 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { bills: [newBill, ...state.bills] };
-      }),
 
-      updateBill: (id, updates) => set((state) => ({
-        bills: state.bills.map((bill) =>
-          bill.id === id ? { ...bill, ...updates, updatedAt: Date.now() } : bill
-        ),
-      })),
+        await supabase.from('bills').insert(mapToSnake({ ...newBill, userId: user.id }));
 
-      deleteBill: (id) => set((state) => ({
-        bills: state.bills.filter((bill) => bill.id !== id),
-      })),
+        set((state) => ({ bills: [newBill, ...state.bills] }));
+      },
+
+      updateBill: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase.from('bills').update(mapToSnake(updatedData)).eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          bills: state.bills.map((bill) =>
+            bill.id === id ? { ...bill, ...updates, updatedAt: Date.now() } : bill
+          ),
+        }));
+      },
+
+      deleteBill: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('bills').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          bills: state.bills.filter((bill) => bill.id !== id),
+        }));
+      },
 
       // Savings Goals actions
-      addSavingsGoal: (goal) => set((state) => {
+      addSavingsGoal: async (goal) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newGoal: SavingsGoal = {
           ...goal,
@@ -375,42 +724,94 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { savingsGoals: [newGoal, ...state.savingsGoals] };
-      }),
 
-      updateSavingsGoal: (id, updates) => set((state) => ({
-        savingsGoals: state.savingsGoals.map((goal) => {
-          if (goal.id === id) {
-            const merged = { ...goal, ...updates, updatedAt: Date.now() };
-            merged.remainingAmount = Math.max(0, merged.targetAmount - merged.savedAmount);
-            return merged;
-          }
-          return goal;
-        }),
-      })),
+        await supabase.from('savings_goals').insert(mapToSnake({ ...newGoal, userId: user.id }));
 
-      deleteSavingsGoal: (id) => set((state) => ({
-        savingsGoals: state.savingsGoals.filter((goal) => goal.id !== id),
-      })),
+        set((state) => ({ savingsGoals: [newGoal, ...state.savingsGoals] }));
+      },
 
-      addSavingsToGoal: (id, amount) => set((state) => ({
-        savingsGoals: state.savingsGoals.map((goal) => {
-          if (goal.id === id) {
-            const savedAmount = goal.savedAmount + amount;
-            const remainingAmount = Math.max(0, goal.targetAmount - savedAmount);
-            return {
-              ...goal,
-              savedAmount,
-              remainingAmount,
-              updatedAt: Date.now(),
-            };
-          }
-          return goal;
-        }),
-      })),
+      updateSavingsGoal: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let merged: any = null;
+        set((state) => {
+          state.savingsGoals.forEach((goal) => {
+            if (goal.id === id) {
+              merged = { ...goal, ...updates, updatedAt: Date.now() };
+              merged.remainingAmount = Math.max(0, merged.targetAmount - merged.savedAmount);
+            }
+          });
+          return {};
+        });
+
+        if (!merged) return;
+
+        await supabase
+          .from('savings_goals')
+          .update(mapToSnake(merged))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          savingsGoals: state.savingsGoals.map((goal) => (goal.id === id ? merged : goal)),
+        }));
+      },
+
+      deleteSavingsGoal: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('savings_goals').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          savingsGoals: state.savingsGoals.filter((goal) => goal.id !== id),
+        }));
+      },
+
+      addSavingsToGoal: async (id, amount) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let updatedGoal: any = null;
+        set((state) => {
+          state.savingsGoals.forEach((goal) => {
+            if (goal.id === id) {
+              const savedAmount = goal.savedAmount + amount;
+              const remainingAmount = Math.max(0, goal.targetAmount - savedAmount);
+              updatedGoal = {
+                ...goal,
+                savedAmount,
+                remainingAmount,
+                updatedAt: Date.now(),
+              };
+            }
+          });
+          return {};
+        });
+
+        if (!updatedGoal) return;
+
+        await supabase
+          .from('savings_goals')
+          .update(mapToSnake(updatedGoal))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          savingsGoals: state.savingsGoals.map((goal) => (goal.id === id ? updatedGoal : goal)),
+        }));
+      },
 
       // Trip Planner actions
-      addTrip: (trip) => set((state) => {
+      addTrip: async (trip) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newTrip: Trip = {
           ...trip,
@@ -420,35 +821,69 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { trips: [newTrip, ...state.trips] };
-      }),
 
-      updateTrip: (id, updates) => set((state) => ({
-        trips: state.trips.map((t) => {
-          if (t.id === id) {
-            const merged = { ...t, ...updates, updatedAt: Date.now() };
-            if (updates.expenses) {
-              const e = updates.expenses;
-              merged.estimatedBudget = e.travel + e.hotel + e.food + e.shopping + e.activities + e.emergency + e.misc;
+        await supabase.from('trip_planner').insert(mapToSnake({ ...newTrip, userId: user.id }));
+
+        set((state) => ({ trips: [newTrip, ...state.trips] }));
+      },
+
+      updateTrip: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let merged: any = null;
+        set((state) => {
+          state.trips.forEach((t) => {
+            if (t.id === id) {
+              merged = { ...t, ...updates, updatedAt: Date.now() };
+              if (updates.expenses) {
+                const e = updates.expenses;
+                merged.estimatedBudget =
+                  e.travel + e.hotel + e.food + e.shopping + e.activities + e.emergency + e.misc;
+              }
+              if (merged.savedAmount >= merged.estimatedBudget) {
+                merged.paymentStatus = 'fully_funded';
+              } else if (merged.savedAmount > 0) {
+                merged.paymentStatus = 'partially_funded';
+              } else {
+                merged.paymentStatus = 'not_started';
+              }
             }
-            if (merged.savedAmount >= merged.estimatedBudget) {
-              merged.paymentStatus = 'fully_funded';
-            } else if (merged.savedAmount > 0) {
-              merged.paymentStatus = 'partially_funded';
-            } else {
-              merged.paymentStatus = 'not_started';
-            }
-            return merged;
-          }
-          return t;
-        }),
-      })),
+          });
+          return {};
+        });
 
-      deleteTrip: (id) => set((state) => ({
-        trips: state.trips.filter((t) => t.id !== id),
-      })),
+        if (!merged) return;
 
-      addTripContribution: (tripId, contribution) => set((state) => {
+        await supabase
+          .from('trip_planner')
+          .update(mapToSnake(merged))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          trips: state.trips.map((t) => (t.id === id ? merged : t)),
+        }));
+      },
+
+      deleteTrip: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('trip_planner').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          trips: state.trips.filter((t) => t.id !== id),
+        }));
+      },
+
+      addTripContribution: async (tripId, contribution) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const time = getCurrentTime();
         const date = getCurrentDate();
@@ -460,65 +895,100 @@ export const useAppStore = create<AppState>()(
           timestamp: now,
         };
 
-        const updatedTrips = state.trips.map((t) => {
-          if (t.id === tripId) {
-            const savedAmount = t.savedAmount + contribution.amount;
-            const contributions = [newContribution, ...t.contributions];
-            const paymentStatus: TripPaymentStatus = savedAmount >= t.estimatedBudget ? 'fully_funded' : 'partially_funded';
+        const currentTrip = get().trips.find((t) => t.id === tripId);
+        if (!currentTrip) return;
 
-            if (savedAmount >= t.estimatedBudget && t.savedAmount < t.estimatedBudget) {
-              state.addNotification({
-                type: 'trip_budget_funded',
-                title: 'Trip Fully Funded! 🎉',
-                message: `Congratulations! Your budget for "${t.tripName}" (₹${t.estimatedBudget.toLocaleString()}) is fully funded.`,
-                read: false,
-                relatedId: t.id,
-              });
+        const savedAmount = currentTrip.savedAmount + contribution.amount;
+        const contributions = [newContribution, ...currentTrip.contributions];
+        const paymentStatus: TripPaymentStatus =
+          savedAmount >= currentTrip.estimatedBudget ? 'fully_funded' : 'partially_funded';
+
+        const updatedFields = {
+          savedAmount,
+          contributions,
+          paymentStatus,
+          updatedAt: now,
+        };
+
+        await supabase
+          .from('trip_planner')
+          .update(mapToSnake(updatedFields))
+          .eq('id', tripId)
+          .eq('user_id', user.id);
+
+        set((state) => {
+          const updatedTrips = state.trips.map((t) => {
+            if (t.id === tripId) {
+              if (savedAmount >= t.estimatedBudget && t.savedAmount < t.estimatedBudget) {
+                state.addNotification({
+                  type: 'trip_budget_funded',
+                  title: 'Trip Fully Funded! 🎉',
+                  message: `Congratulations! Your budget for "${t.tripName}" (₹${t.estimatedBudget.toLocaleString()}) is fully funded.`,
+                  read: false,
+                  relatedId: t.id,
+                });
+              }
+              return {
+                ...t,
+                ...updatedFields,
+              };
             }
+            return t;
+          });
+          return { trips: updatedTrips };
+        });
+      },
 
-            return {
-              ...t,
-              savedAmount,
-              contributions,
-              paymentStatus,
-              updatedAt: now,
-            };
-          }
-          return t;
+      deleteTripContribution: async (tripId, contributionId) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let updatedFields: any = null;
+        set((state) => {
+          state.trips.forEach((t) => {
+            if (t.id === tripId) {
+              const contributionToRemove = t.contributions.find((c) => c.id === contributionId);
+              const subAmount = contributionToRemove ? contributionToRemove.amount : 0;
+              const contributions = t.contributions.filter((c) => c.id !== contributionId);
+              const savedAmount = Math.max(0, t.savedAmount - subAmount);
+              const paymentStatus: TripPaymentStatus =
+                savedAmount >= t.estimatedBudget
+                  ? 'fully_funded'
+                  : savedAmount > 0
+                  ? 'partially_funded'
+                  : 'not_started';
+
+              updatedFields = {
+                savedAmount,
+                contributions,
+                paymentStatus,
+                updatedAt: Date.now(),
+              };
+            }
+          });
+          return {};
         });
 
-        return { trips: updatedTrips };
-      }),
+        if (!updatedFields) return;
 
-      deleteTripContribution: (tripId, contributionId) => set((state) => {
-        const updatedTrips = state.trips.map((t) => {
-          if (t.id === tripId) {
-            const contributionToRemove = t.contributions.find((c) => c.id === contributionId);
-            const subAmount = contributionToRemove ? contributionToRemove.amount : 0;
-            const contributions = t.contributions.filter((c) => c.id !== contributionId);
-            const savedAmount = Math.max(0, t.savedAmount - subAmount);
-            const paymentStatus: TripPaymentStatus = savedAmount >= t.estimatedBudget 
-              ? 'fully_funded' 
-              : savedAmount > 0 
-              ? 'partially_funded' 
-              : 'not_started';
+        await supabase
+          .from('trip_planner')
+          .update(mapToSnake(updatedFields))
+          .eq('id', tripId)
+          .eq('user_id', user.id);
 
-            return {
-              ...t,
-              savedAmount,
-              contributions,
-              paymentStatus,
-              updatedAt: Date.now(),
-            };
-          }
-          return t;
-        });
-
-        return { trips: updatedTrips };
-      }),
+        set((state) => ({
+          trips: state.trips.map((t) => (t.id === tripId ? { ...t, ...updatedFields } : t)),
+        }));
+      },
 
       // Financial Notes actions
-      addFinancialNote: (note) => set((state) => {
+      addFinancialNote: async (note) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
         const now = Date.now();
         const newNote: FinancialNote = {
           ...note,
@@ -528,35 +998,119 @@ export const useAppStore = create<AppState>()(
           createdAt: now,
           updatedAt: now,
         };
-        return { financialNotes: [newNote, ...state.financialNotes] };
-      }),
 
-      updateFinancialNote: (id, updates) => set((state) => ({
-        financialNotes: state.financialNotes.map((n) =>
-          n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n
-        ),
-      })),
+        await supabase.from('financial_notes').insert(mapToSnake({ ...newNote, userId: user.id }));
 
-      deleteFinancialNote: (id) => set((state) => ({
-        financialNotes: state.financialNotes.filter((n) => n.id !== id),
-      })),
+        set((state) => ({ financialNotes: [newNote, ...state.financialNotes] }));
+      },
 
-      pinFinancialNote: (id) => set((state) => ({
-        financialNotes: state.financialNotes.map((n) =>
-          n.id === id ? { ...n, pinned: !n.pinned, updatedAt: Date.now() } : n
-        ),
-      })),
+      updateFinancialNote: async (id, updates) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
 
-      archiveFinancialNote: (id) => set((state) => ({
-        financialNotes: state.financialNotes.map((n) =>
-          n.id === id ? { ...n, status: n.status === 'archived' ? 'active' : 'archived', updatedAt: Date.now() } : n
-        ),
-      })),
+        const updatedData = { ...updates, updatedAt: Date.now() };
+        await supabase
+          .from('financial_notes')
+          .update(mapToSnake(updatedData))
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          financialNotes: state.financialNotes.map((n) =>
+            n.id === id ? { ...n, ...updates, updatedAt: Date.now() } : n
+          ),
+        }));
+      },
+
+      deleteFinancialNote: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        await supabase.from('financial_notes').delete().eq('id', id).eq('user_id', user.id);
+
+        set((state) => ({
+          financialNotes: state.financialNotes.filter((n) => n.id !== id),
+        }));
+      },
+
+      pinFinancialNote: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let updatedNote: any = null;
+        set((state) => {
+          state.financialNotes.forEach((n) => {
+            if (n.id === id) {
+              updatedNote = { ...n, pinned: !n.pinned, updatedAt: Date.now() };
+            }
+          });
+          return {};
+        });
+
+        if (!updatedNote) return;
+
+        await supabase
+          .from('financial_notes')
+          .update({ pinned: updatedNote.pinned, updated_at: updatedNote.updatedAt })
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          financialNotes: state.financialNotes.map((n) => (n.id === id ? updatedNote : n)),
+        }));
+      },
+
+      archiveFinancialNote: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        if (!user) return;
+
+        let updatedNote: any = null;
+        set((state) => {
+          state.financialNotes.forEach((n) => {
+            if (n.id === id) {
+              updatedNote = {
+                ...n,
+                status: n.status === 'archived' ? 'active' : 'archived',
+                updatedAt: Date.now(),
+              };
+            }
+          });
+          return {};
+        });
+
+        if (!updatedNote) return;
+
+        await supabase
+          .from('financial_notes')
+          .update({ status: updatedNote.status, updated_at: updatedNote.updatedAt })
+          .eq('id', id)
+          .eq('user_id', user.id);
+
+        set((state) => ({
+          financialNotes: state.financialNotes.map((n) => (n.id === id ? updatedNote : n)),
+        }));
+      },
 
       // Local notifications tracker
-      addNotifiedId: (id) => set((state) => ({
-        notifiedIds: [...state.notifiedIds, id],
-      })),
+      addNotifiedId: async (id) => {
+        const { data: { session } } = await supabase.auth.getSession();
+        const user = session?.user;
+        const currentNotifiedIds = get().notifiedIds;
+        const updatedNotifiedIds = [...currentNotifiedIds, id];
+
+        if (user) {
+          await supabase
+            .from('user_profiles')
+            .update({ notified_ids: updatedNotifiedIds })
+            .eq('id', user.id);
+        }
+
+        set({ notifiedIds: updatedNotifiedIds });
+      },
 
       // Quote actions
       setQuoteOfTheDay: (quote) => set({ quoteOfTheDay: quote }),
@@ -564,31 +1118,42 @@ export const useAppStore = create<AppState>()(
       pickDailyQuote: () => {
         const state = get();
         const todayStr = new Date().toISOString().split('T')[0];
-        
+
         if (state.quoteOfTheDay && state.quoteOfTheDay.date === todayStr) {
           return { quote: state.quoteOfTheDay.quote, author: state.quoteOfTheDay.author || 'Unknown' };
         }
 
-        let availableIndexes = quotes.map((_, i) => i).filter(i => !state.shownQuoteIndexes.includes(i));
-        
+        let availableIndexes = quotes.map((_, i) => i).filter((i) => !state.shownQuoteIndexes.includes(i));
+
         if (availableIndexes.length === 0) {
           availableIndexes = quotes.map((_, i) => i);
-          // Set indexes directly to allow immediate selection
           set({ shownQuoteIndexes: [] });
         }
 
         const randomIndex = availableIndexes[Math.floor(Math.random() * availableIndexes.length)];
         const selectedQuote = quotes[randomIndex];
-        
+
         const newState: QuoteState = {
           quote: selectedQuote.quote,
           author: selectedQuote.author || 'Unknown',
-          date: todayStr
+          date: todayStr,
         };
+
+        const updatedShownQuoteIndexes = [...state.shownQuoteIndexes, randomIndex];
+
+        // Background sync to Supabase user profile
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.user) {
+            supabase
+              .from('user_profiles')
+              .update({ shown_quote_indexes: updatedShownQuoteIndexes })
+              .eq('id', session.user.id);
+          }
+        });
 
         set((s) => ({
           quoteOfTheDay: newState,
-          shownQuoteIndexes: [...s.shownQuoteIndexes, randomIndex]
+          shownQuoteIndexes: updatedShownQuoteIndexes,
         }));
 
         return { quote: selectedQuote.quote, author: selectedQuote.author || 'Unknown' };
@@ -596,7 +1161,34 @@ export const useAppStore = create<AppState>()(
 
       // Data actions
       clearAllData: () => {
-        if (typeof window !== 'undefined' && confirm('Are you sure you want to delete all data? This cannot be undone.')) {
+        if (
+          typeof window !== 'undefined' &&
+          confirm('Are you sure you want to delete all data? This cannot be undone.')
+        ) {
+          // Clear Supabase database under this user
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            const user = session?.user;
+            if (user) {
+              Promise.all([
+                supabase.from('transactions').delete().eq('user_id', user.id),
+                supabase.from('debts').delete().eq('user_id', user.id),
+                supabase.from('loans').delete().eq('user_id', user.id),
+                supabase.from('bills').delete().eq('user_id', user.id),
+                supabase.from('purchase_planner').delete().eq('user_id', user.id),
+                supabase.from('priority_purchases').delete().eq('user_id', user.id),
+                supabase.from('savings_goals').delete().eq('user_id', user.id),
+                supabase.from('monthly_goals').delete().eq('user_id', user.id),
+                supabase.from('trip_planner').delete().eq('user_id', user.id),
+                supabase.from('financial_notes').delete().eq('user_id', user.id),
+                supabase.from('notifications').delete().eq('user_id', user.id),
+                supabase
+                  .from('user_profiles')
+                  .update({ shown_quote_indexes: [], notified_ids: [] })
+                  .eq('id', user.id),
+              ]);
+            }
+          });
+
           set({
             transactions: [],
             debts: [],
@@ -650,6 +1242,67 @@ export const useAppStore = create<AppState>()(
         try {
           const parsed = JSON.parse(data);
           if (parsed.transactions && parsed.debts && parsed.loans && parsed.monthlyTargets) {
+            const uploadImports = async () => {
+              const { data: { session } } = await supabase.auth.getSession();
+              const user = session?.user;
+              if (!user) return;
+
+              const mapWithUserId = (list: any[]) =>
+                (list || []).map((item) => mapToSnake({ ...item, userId: user.id }));
+
+              // Delete existing and insert imported
+              await Promise.all([
+                supabase.from('transactions').delete().eq('user_id', user.id),
+                supabase.from('debts').delete().eq('user_id', user.id),
+                supabase.from('loans').delete().eq('user_id', user.id),
+                supabase.from('bills').delete().eq('user_id', user.id),
+                supabase.from('purchase_planner').delete().eq('user_id', user.id),
+                supabase.from('priority_purchases').delete().eq('user_id', user.id),
+                supabase.from('savings_goals').delete().eq('user_id', user.id),
+                supabase.from('monthly_goals').delete().eq('user_id', user.id),
+                supabase.from('trip_planner').delete().eq('user_id', user.id),
+                supabase.from('financial_notes').delete().eq('user_id', user.id),
+                supabase.from('notifications').delete().eq('user_id', user.id),
+              ]);
+
+              const promises = [];
+              if (parsed.transactions?.length)
+                promises.push(supabase.from('transactions').insert(mapWithUserId(parsed.transactions)));
+              if (parsed.debts?.length)
+                promises.push(supabase.from('debts').insert(mapWithUserId(parsed.debts)));
+              if (parsed.loans?.length)
+                promises.push(supabase.from('loans').insert(mapWithUserId(parsed.loans)));
+              if (parsed.bills?.length)
+                promises.push(supabase.from('bills').insert(mapWithUserId(parsed.bills)));
+              if (parsed.purchasePlanner?.length)
+                promises.push(
+                  supabase.from('purchase_planner').insert(mapWithUserId(parsed.purchasePlanner))
+                );
+              if (parsed.priorityPurchases?.length)
+                promises.push(
+                  supabase.from('priority_purchases').insert(mapWithUserId(parsed.priorityPurchases))
+                );
+              if (parsed.savingsGoals?.length)
+                promises.push(
+                  supabase.from('savings_goals').insert(mapWithUserId(parsed.savingsGoals))
+                );
+              if (parsed.monthlyTargets?.length)
+                promises.push(supabase.from('monthly_goals').insert(mapWithUserId(parsed.monthlyTargets)));
+              if (parsed.trips?.length)
+                promises.push(supabase.from('trip_planner').insert(mapWithUserId(parsed.trips)));
+              if (parsed.financialNotes?.length)
+                promises.push(
+                  supabase.from('financial_notes').insert(mapWithUserId(parsed.financialNotes))
+                );
+              if (parsed.notifications?.length)
+                promises.push(supabase.from('notifications').insert(mapWithUserId(parsed.notifications)));
+
+              await Promise.all(promises);
+              await get().fetchUserData();
+            };
+
+            uploadImports();
+
             set({
               transactions: parsed.transactions,
               debts: parsed.debts,
@@ -724,12 +1377,9 @@ export const useSelectors = () => {
 
   const currentMonthSavings = Math.max(0, currentMonthIncome - currentMonthExpense);
 
-  const upcomingPayments = debts
-    .filter((d) => d.status !== 'paid' && d.remainingAmount > 0)
-    .reduce((sum, d) => sum + d.remainingAmount, 0) +
-    loans
-    .filter((l) => l.status !== 'completed' && l.remainingAmount > 0)
-    .reduce((sum, l) => sum + l.remainingAmount, 0);
+  const upcomingPayments =
+    debts.filter((d) => d.status !== 'paid' && d.remainingAmount > 0).reduce((sum, d) => sum + d.remainingAmount, 0) +
+    loans.filter((l) => l.status !== 'completed' && l.remainingAmount > 0).reduce((sum, l) => sum + l.remainingAmount, 0);
 
   const safeToSpend = currentBalance - upcomingPayments;
 
@@ -737,44 +1387,40 @@ export const useSelectors = () => {
     ? Math.min(100, (currentMonthIncome / currentMonthTarget.targetAmount) * 100)
     : 0;
 
-  // New Selector Computations
-  // 1. Purchase Planner
+  // 1. Purchase Planner Selectors
   const totalPlannedPurchasesCount = purchasePlanner.filter((p) => p.status !== 'purchased').length;
   const totalPlannedCost = purchasePlanner
     .filter((p) => p.status !== 'purchased')
     .reduce((sum, p) => sum + p.estimatedCost, 0);
-  const highPriorityPurchasesCount = purchasePlanner
-    .filter((p) => p.status !== 'purchased' && p.priority === 'high').length;
+  const highPriorityPurchasesCount = purchasePlanner.filter(
+    (p) => p.status !== 'purchased' && p.priority === 'high'
+  ).length;
 
-  // 2. Priority Purchases
+  // 2. Priority Purchases Selectors
   const pendingPriorityPurchasesCount = priorityPurchases.filter((p) => !p.purchased).length;
   const totalImmediateCostRequired = priorityPurchases
     .filter((p) => !p.purchased)
     .reduce((sum, p) => sum + p.estimatedCost, 0);
 
-  // 3. Bills
+  // 3. Bills Selectors
   const upcomingBillsCount = bills.filter((b) => b.status !== 'paid').length;
-  const totalBillsDueAmount = bills
-    .filter((b) => b.status !== 'paid')
-    .reduce((sum, b) => sum + b.amount, 0);
+  const totalBillsDueAmount = bills.filter((b) => b.status !== 'paid').reduce((sum, b) => sum + b.amount, 0);
 
-  // 4. Savings Goals
+  // 4. Savings Goals Selectors
   const savingsGoalsCount = savingsGoals.length;
   const totalSavedAmount = savingsGoals.reduce((sum, g) => sum + g.savedAmount, 0);
   const totalSavingsTarget = savingsGoals.reduce((sum, g) => sum + g.targetAmount, 0);
   const savingsGoalsProgress = totalSavingsTarget > 0 ? (totalSavedAmount / totalSavingsTarget) * 100 : 0;
 
-  // 5. Monthly Goals Expansion
+  // 5. Monthly Goals Expansion Selectors
   const currentMonthSavingsTarget = currentMonthTarget?.savingsTargetAmount || 0;
   const currentMonthSpendingLimit = currentMonthTarget?.spendingLimitAmount || 0;
 
-  const monthlyTargetSavingsProgress = currentMonthSavingsTarget > 0
-    ? Math.min(100, (currentMonthSavings / currentMonthSavingsTarget) * 100)
-    : 0;
+  const monthlyTargetSavingsProgress =
+    currentMonthSavingsTarget > 0 ? Math.min(100, (currentMonthSavings / currentMonthSavingsTarget) * 100) : 0;
 
-  const monthlyTargetSpendingProgress = currentMonthSpendingLimit > 0
-    ? Math.min(100, (currentMonthExpense / currentMonthSpendingLimit) * 100)
-    : 0;
+  const monthlyTargetSpendingProgress =
+    currentMonthSpendingLimit > 0 ? Math.min(100, (currentMonthExpense / currentMonthSpendingLimit) * 100) : 0;
 
   // 6. Trip Planner Selectors
   const totalPlannedTrips = trips.filter((t) => t.status !== 'trip_completed' && t.status !== 'cancelled').length;
@@ -788,7 +1434,10 @@ export const useSelectors = () => {
     .filter((t) => t.status !== 'trip_completed' && t.status !== 'cancelled')
     .sort((a, b) => a.targetTravelDate.localeCompare(b.targetTravelDate));
   const tripsReadyToBook = trips.filter(
-    (t) => (t.status !== 'trip_completed' && t.status !== 'cancelled') && (t.paymentStatus === 'fully_funded' || t.savedAmount >= t.estimatedBudget)
+    (t) =>
+      t.status !== 'trip_completed' &&
+      t.status !== 'cancelled' &&
+      (t.paymentStatus === 'fully_funded' || t.savedAmount >= t.estimatedBudget)
   ).length;
 
   return {
@@ -804,8 +1453,6 @@ export const useSelectors = () => {
     upcomingPayments,
     safeToSpend,
     monthlyTargetProgress,
-    currency: settings.currency,
-    // Expanded Selectors
     totalPlannedPurchasesCount,
     totalPlannedCost,
     highPriorityPurchasesCount,
@@ -821,14 +1468,13 @@ export const useSelectors = () => {
     currentMonthSpendingLimit,
     monthlyTargetSavingsProgress,
     monthlyTargetSpendingProgress,
-    // Trips Selectors
     totalPlannedTrips,
     totalBudgetRequired,
     totalMoneyReserved,
     upcomingTrips,
     tripsReadyToBook,
+    currency: settings.currency,
   };
 };
 
-// Helper functions
-export { getCurrentTime, getCurrentDate, getCurrentMonth };
+export { getCurrentMonth, getCurrentDate, getCurrentTime };

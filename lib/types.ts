@@ -229,6 +229,88 @@ export interface AppState {
   quoteOfTheDay: QuoteState | null;
   shownQuoteIndexes: number[];
   notifiedIds: string[];
+  localDataImported: boolean;
+  fetchUserData: () => Promise<void>;
+  clearUserData: () => void;
+  migrateLocalStorageToCloud: () => Promise<boolean>;
+  skipLocalStorageMigration: () => Promise<boolean>;
+
+  // Transaction actions
+  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+
+  // Debt actions
+  addDebt: (debt: Omit<Debt, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateDebt: (id: string, updates: Partial<Debt>) => Promise<void>;
+  deleteDebt: (id: string) => Promise<void>;
+
+  // Loan actions
+  addLoan: (loan: Omit<Loan, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateLoan: (id: string, updates: Partial<Loan>) => Promise<void>;
+  deleteLoan: (id: string) => Promise<void>;
+
+  // Monthly target actions
+  setMonthlyTarget: (target: Omit<MonthlyTarget, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateMonthlyTarget: (id: string, updates: Partial<MonthlyTarget>) => Promise<void>;
+  deleteMonthlyTarget: (id: string) => Promise<void>;
+
+  // Notification actions
+  addNotification: (notification: Omit<Notification, 'id' | 'createdAt'>) => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  clearNotifications: () => Promise<void>;
+
+  // Settings actions
+  updateSettings: (updates: Partial<Settings>) => Promise<void>;
+  setCurrency: (currency: Currency) => Promise<void>;
+
+  // Purchase Planner actions
+  addPurchasePlannerItem: (item: Omit<PurchasePlannerItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updatePurchasePlannerItem: (id: string, updates: Partial<PurchasePlannerItem>) => Promise<void>;
+  deletePurchasePlannerItem: (id: string) => Promise<void>;
+
+  // Priority Purchases actions
+  addPriorityPurchase: (item: Omit<PriorityPurchaseItem, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updatePriorityPurchase: (id: string, updates: Partial<PriorityPurchaseItem>) => Promise<void>;
+  deletePriorityPurchase: (id: string) => Promise<void>;
+
+  // Bills & Payments actions
+  addBill: (bill: Omit<Bill, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateBill: (id: string, updates: Partial<Bill>) => Promise<void>;
+  deleteBill: (id: string) => Promise<void>;
+
+  // Savings Goals actions
+  addSavingsGoal: (goal: Omit<SavingsGoal, 'id' | 'createdAt' | 'updatedAt' | 'remainingAmount'>) => Promise<void>;
+  updateSavingsGoal: (id: string, updates: Partial<SavingsGoal>) => Promise<void>;
+  deleteSavingsGoal: (id: string) => Promise<void>;
+  addSavingsToGoal: (id: string, amount: number) => Promise<void>;
+
+  // Trip Planner actions
+  addTrip: (trip: Omit<Trip, 'id' | 'createdAt' | 'updatedAt' | 'savedAmount' | 'contributions'>) => Promise<void>;
+  updateTrip: (id: string, updates: Partial<Trip>) => Promise<void>;
+  deleteTrip: (id: string) => Promise<void>;
+  addTripContribution: (tripId: string, contribution: Omit<TripContribution, 'id' | 'date' | 'time' | 'timestamp'>) => Promise<void>;
+  deleteTripContribution: (tripId: string, contributionId: string) => Promise<void>;
+
+  // Financial Notes actions
+  addFinancialNote: (note: Omit<FinancialNote, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'pinned'>) => Promise<void>;
+  updateFinancialNote: (id: string, updates: Partial<FinancialNote>) => Promise<void>;
+  deleteFinancialNote: (id: string) => Promise<void>;
+  pinFinancialNote: (id: string) => Promise<void>;
+  archiveFinancialNote: (id: string) => Promise<void>;
+
+  // Local notifications tracker
+  addNotifiedId: (id: string) => Promise<void>;
+
+  // Quote actions
+  setQuoteOfTheDay: (quote: QuoteState) => void;
+  resetQuoteIndexPool: () => void;
+  pickDailyQuote: () => { quote: string; author: string };
+
+  // Data actions
+  clearAllData: () => boolean;
+  exportData: () => string;
+  importData: (data: string) => boolean;
 }
 
 export interface FinancialNote {
