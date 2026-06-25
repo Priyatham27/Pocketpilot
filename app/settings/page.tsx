@@ -32,7 +32,7 @@ import { useAppStore } from '@/lib/store';
 import { currencyNames } from '@/lib/currency';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const supabase = createClient();
 
   React.useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { CheckCircle2, Mail as MailIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,8 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
+
+  const supabase = createClient();
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +44,9 @@ export default function RegisterPage() {
         password,
         options: {
           data: {
-            full_name: email.split('@')[0], // Default display name to local part of email
+            full_name: email.split('@')[0],
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
