@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useAppStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,13 +12,13 @@ import { Lock, Mail, Compass, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const supabase = createClient();
+  const fetchUserData = useAppStore((state) => state.fetchUserData);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,13 +29,15 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         toast.error(error.message);
       } else {
         toast.success('Logged in successfully!');
-        router.push('/dashboard');
-        router.refresh();
+        // Fetch user data before navigating so store is ready
+        await fetchUserData();
+        // Hard redirect so middleware re-reads the fresh session cookie
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       toast.error('An unexpected error occurred.');

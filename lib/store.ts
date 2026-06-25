@@ -3,7 +3,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { quotes } from './quotes';
-import { supabase, mapToSnake, mapToCamel } from './supabase';
+import { createClient } from './supabase/client';
+import { mapToSnake, mapToCamel } from './supabase/utils';
+
+const supabase = createClient();
 import {
   Transaction,
   Debt,
