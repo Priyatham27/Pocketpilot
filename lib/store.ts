@@ -1012,7 +1012,7 @@ export const useAppStore = create<AppState>()(
 
         await supabase
           .from('financial_notes')
-          .update({ pinned: updatedNote.pinned, updated_at: updatedNote.updatedAt })
+          .update(mapToSnake({ pinned: updatedNote.pinned, updatedAt: updatedNote.updatedAt }))
           .eq('id', id)
           .eq('user_id', user.id);
 
@@ -1043,7 +1043,7 @@ export const useAppStore = create<AppState>()(
 
         await supabase
           .from('financial_notes')
-          .update({ status: updatedNote.status, updated_at: updatedNote.updatedAt })
+          .update(mapToSnake({ status: updatedNote.status, updatedAt: updatedNote.updatedAt }))
           .eq('id', id)
           .eq('user_id', user.id);
 
